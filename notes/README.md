@@ -3,7 +3,7 @@
 ## Kafka Topic
 * Um local para armazenar dados
 * Como se fosse uma tabela em um banco de dados, mas sem nenhuma constraint
-  * Ou seja, um tópico não realiza nenhuma validaão sobre a suas informaões
+  * Ou seja, um tópico não realiza nenhuma validação sobre a suas informaões
 * Não é consultável
   * A fim de inserir uma informação em um tópico, é necessário um Producer
   * A fim de ler um dado de um tópico, é necessário um Consumer
@@ -94,3 +94,84 @@
 ### Cooperative rebalance
 * Apenas um pequeno grupo de partições são migradas de um consumer para outro
 * Os outros consumers continuam processando normalmente
+
+## Kafka Safe Producer Settings
+* Default configs since kafka > 2.8
+* **acks = all**
+  * Garante que todas as replicas da partição receberam a mensagem antes de enviar um ack (Acknowledgement)
+* **enable.idempotence = true**
+  * Idempotencia: garante que uma mensagem duplicada não vai ser gravada duas vezes no tópico (provado por retries)
+  * Exemplo: 
+    * mensagem A é enviada mas o tópico não retorna nenhum ack
+    * mensagem A é enviada novamente (retry)
+    * tópico entende que é uma mensagem duplicada e não escreve novamente, enviando apenas um ack para o producer
+* **retries = MAX_INT**
+  * Garante que todos os retries são executados para uma mensagem 
+* **max.in.flight.requests.per.connection = 5**
+  * Garante performance máxima enquanto mantém a ordenação de mensagens
+* **linger.ms**
+  * Tempo (em ms) que o producer vai esperar para enviar o batch
+
+## Network concepts
+* **Throughput:** quantidade de dados transferidos de um lugar para o outro
+* **Latency:** tempo de resposta de um sistema
+
+## Producer partitioner
+
+### Key != null
+* Quando a "key" da mensagem não é nula, o "Partitioner" padrão do Producer define uma partição para a mensagem através de uma fórmula e um algoritmo de hash - murmur2
+* A mesma chave sempre irá para a mesma partição
+
+### Key == null
+* Quando a key == null, o producer possui dois tipos de partitioners
+  
+#### Round Robin (kafka ≤ 2.3)
+* As mensagens são distribuidas igualmente nas partições
+  * Ex: 6 mensagens para 5 partições –> 4 partições receberam 4 mensagens e 1 partição receberá 2 mensagens
+* Isso implica em uma maior quantidade lotes pequenos
+* Mais requests e maior latência
+
+#### Sticky Partitioner (kafka ≥ 2.4)
+* As mensagens são enviadas em lote para a mesma partição
+* "Stick" (permanece) em uma partição até o lote estar completo ou o "linger.ms" ser atingido
+* Menos requests e menor latência 
+
+## Partition count
+* Cada partição suporta um throughput de poucos MB/s
+* Quanto maior o número de partições:
+  * Melhor paralelismo, melhor throughput
+  * Habilidade de rodar mais grupos de consumers
+  * Habilidade de adicionarmais brokers
+  * MAIS arquivos abertos no Kafka
+
+* Partitions por topico:
+  * Small cluter (< 6 brokers): 3 x # brokers
+  * Big cluter (> 12 brokers): 2 x # brokers
+
+## Replication factor
+* Pelo menos 2, geralmente 3, no máximo 4
+* NUNCA colocar apenas 1 em prod
+* Quanto maior o replication-factor (N):
+  * Maior a durabilidade do sistema (N-1) brokers podem falhar
+  * Maior disponibilidade do sistema (N - min.insync.replicas se acks = all)
+  * Mais replicações (maior latência se acks = all)
+  * Mais espaço em disco consumido 
+
+## [Topic name convention](https://cnr.sh/essays/how-paint-bike-shed-kafka-topic-naming-conventions)
+
+
+## Kafka Projects Ideas
+* **Plataforma de streaming**
+  * Usuário precisa saber em qual parte do vídeo ele parou
+  * Envio de mensagens (com as informações da transmissão) em tempo real para um tópico
+* **Uber**
+  * Usuário precisa saber da localização em tempo real do motorista
+  * App deve regular o preço de acordo com a quantidade de motoristas e quantidade de usuários
+  * Tópicos que armazenam as posições dos motoristas e usuários
+* **Social media**
+  * Usuário precisa saber informações sobre likes e comentário em posts em tempo real
+  * App deve exibir somente os posts mais engajados no feed principal
+  * Tópicos que armazenam as informaçoes de likes, comentários e junta tudo em um tópico de posts
+* **Sistema de métricas**
+  * Desenvolvedor / PO precisa saber informações em tempo real sobre os microserviços de uma empresa
+  * Tópico armazena informações de métricas 
